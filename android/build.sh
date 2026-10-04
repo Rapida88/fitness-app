@@ -9,7 +9,7 @@ cp ../../fitness-app/index.html assets/index.html 2>/dev/null || true
 aapt package -f -M AndroidManifest.xml -S res -A assets -I $JAR -J build/gen \
   --min-sdk-version 29 --target-sdk-version 34 --version-code $VC --version-name $VN \
   -0 arsc -F build/app.unaligned.apk
-javac -nowarn -source 8 -target 8 -bootclasspath $JAR -classpath $JAR -d build/obj \
+javac -nowarn -source 8 -target 8 -bootclasspath $JAR:compile-only/api34-extra.jar -classpath $JAR -d build/obj \
   build/gen/R.java src/de/chris/fitbisapril/*.java
 dalvik-exchange --dex --min-sdk-version=26 --output=build/classes.dex build/obj
 (cd build && zip -q -j app.unaligned.apk classes.dex)

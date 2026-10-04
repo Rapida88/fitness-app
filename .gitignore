@@ -1,3 +1,4 @@
 android/keystore/
 android/build/
 *.jks
+android/compile-only/*.jar

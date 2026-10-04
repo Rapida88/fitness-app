@@ -13,3 +13,4 @@ Die App sucht beim Start selbst nach Updates (`dist/version.json`) und installie
 - `web/fitness-app.html`: die komplette Oberfläche (läuft auch im Browser)
 - `android/`: schlanke Android-Hülle (WebView, Kamera, Foto- und Rezept-KI über die Gemini API, Update-Prüfung)
 - `android/build.sh <versionCode> <versionName>`: baut und signiert die APK. Der Signierschlüssel liegt bewusst nicht im Repo.
+- Vorher einmal `android/compile-only/make-api34-extra.sh` ausführen: holt die Health-Connect-Schnittstellen (Android 14), die nur zum Kompilieren gebraucht werden.

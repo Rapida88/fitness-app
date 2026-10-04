@@ -110,6 +110,29 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        if (web != null) web.evaluateJavascript("window.__fitResume&&window.__fitResume()", null);
+    }
+
+    /* ---------- Schritte über Health Connect (Mi Band via Mi Fitness) ---------- */
+
+    private static final int REQ_STEPS = 77;
+
+    private String stepsState() {
+        if (Build.VERSION.SDK_INT < 34) return "old_android";
+        return checkSelfPermission(Steps.PERM) == android.content.pm.PackageManager.PERMISSION_GRANTED ? "granted" : "denied";
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
+        super.onRequestPermissionsResult(code, perms, results);
+        if (code == REQ_STEPS && web != null) {
+            web.evaluateJavascript("window.__fitStepsPerm&&window.__fitStepsPerm(" + JSONObject.quote(stepsState()) + ")", null);
+        }
+    }
+
+    @Override
     protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
         web.saveState(out);
@@ -233,6 +256,53 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String stepsStatus() {
+            return stepsState();
+        }
+
+        @JavascriptInterface
+        public void stepsConnect() {
+            main.post(new Runnable() {
+                @Override public void run() {
+                    if (Build.VERSION.SDK_INT < 34) return;
+                    requestPermissions(new String[] { Steps.PERM }, REQ_STEPS);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void stepsSettings() {
+            main.post(new Runnable() {
+                @Override public void run() {
+                    try {
+                        Intent i = new Intent("android.health.connect.action.MANAGE_HEALTH_PERMISSIONS");
+                        i.putExtra("android.intent.extra.PACKAGE_NAME", getPackageName());
+                        startActivity(i);
+                    } catch (Exception e) {
+                        try { startActivity(new Intent("android.health.connect.action.HEALTH_HOME_SETTINGS")); }
+                        catch (Exception e2) { Toast.makeText(MainActivity.this, "Health Connect nicht gefunden", Toast.LENGTH_LONG).show(); }
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void stepsRead(final int days, final String id) {
+            main.post(new Runnable() {
+                @Override public void run() {
+                    if (Build.VERSION.SDK_INT < 34) { callJs(id, false, "old_android"); return; }
+                    try {
+                        Steps.read(MainActivity.this, Math.max(1, Math.min(14, days)), new Steps.Cb() {
+                            @Override public void done(boolean ok, String text) { callJs(id, ok, text); }
+                        });
+                    } catch (Throwable t) {
+                        callJs(id, false, "hc_" + t.getClass().getSimpleName());
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
         public void gemini(final String b64, final String prompt, final String key, final String model, final String id) {
             new Thread(new Runnable() {
                 @Override public void run() { runGemini(b64, prompt, key, model, id); }
@@ -243,6 +313,26 @@ public class MainActivity extends Activity {
     /* ---------- Fotos und Rezepte über die Gemini API ---------- */
 
     private void runGemini(String b64, String prompt, String key, String model, String id) {
+        for (int attempt = 0; attempt < 3; attempt++) {
+            String err = runGeminiOnce(b64, prompt, key, model, id);
+            if (err == null) return;
+            boolean retry = err.startsWith("api_5") || err.startsWith("offline");
+            if (!retry || attempt == 2) { callJs(id, false, err); return; }
+            try { Thread.sleep(2000L * (attempt + 1)); } catch (InterruptedException ie) { callJs(id, false, err); return; }
+        }
+    }
+
+    private static String apiMessage(String resp) {
+        try {
+            JSONObject e = new JSONObject(resp).optJSONObject("error");
+            String m = e != null ? e.optString("message", "") : "";
+            m = m.replaceAll("\\s+", " ").trim();
+            return m.length() > 120 ? m.substring(0, 120) : m;
+        } catch (Exception ex) { return ""; }
+    }
+
+    /** Liefert null bei Erfolg (Antwort bereits an JS übergeben), sonst einen Fehlercode. */
+    private String runGeminiOnce(String b64, String prompt, String key, String model, String id) {
         HttpURLConnection c = null;
         try {
             JSONArray parts = new JSONArray();
@@ -271,18 +361,20 @@ public class MainActivity extends Activity {
 
             int code = c.getResponseCode();
             String resp = readAll(code >= 400 ? c.getErrorStream() : c.getInputStream());
-            if (code == 400 && resp.contains("API key")) { callJs(id, false, "bad_key"); return; }
-            if (code == 401 || code == 403) { callJs(id, false, "bad_key"); return; }
-            if (code == 404) { callJs(id, false, "model"); return; }
-            if (code == 429) { callJs(id, false, "quota"); return; }
-            if (code >= 400) { callJs(id, false, "api_" + code); return; }
+            if (code == 400 && resp.contains("API key")) return "bad_key";
+            if (code == 401 || code == 403) return "bad_key";
+            if (code == 404) return "model";
+            if (code == 429) return "quota";
+            if (code >= 400) return "api_" + code + "|" + apiMessage(resp);
 
             JSONObject r = new JSONObject(resp);
             JSONObject fb = r.optJSONObject("promptFeedback");
-            if (fb != null && fb.has("blockReason")) { callJs(id, false, "refused"); return; }
+            if (fb != null && fb.has("blockReason")) return "refused";
             JSONArray cands = r.optJSONArray("candidates");
             StringBuilder sb = new StringBuilder();
+            String finish = "";
             if (cands != null && cands.length() > 0) {
+                finish = cands.getJSONObject(0).optString("finishReason", "");
                 JSONObject content = cands.getJSONObject(0).optJSONObject("content");
                 JSONArray ps = content != null ? content.optJSONArray("parts") : null;
                 if (ps != null) {
@@ -291,16 +383,15 @@ public class MainActivity extends Activity {
                         if (pt != null && !pt.optBoolean("thought", false)) sb.append(pt.optString("text", ""));
                     }
                 }
-                if (sb.length() == 0 && "SAFETY".equals(cands.getJSONObject(0).optString("finishReason"))) {
-                    callJs(id, false, "refused"); return;
-                }
             }
-            if (sb.length() == 0) { callJs(id, false, "parse"); return; }
+            if ("MAX_TOKENS".equals(finish)) return "too_long";
+            if (sb.length() == 0) return "SAFETY".equals(finish) ? "refused" : "parse|leer " + finish;
             callJs(id, true, sb.toString());
+            return null;
         } catch (java.io.IOException e) {
-            callJs(id, false, "offline");
+            return "offline|" + e.getClass().getSimpleName();
         } catch (Exception e) {
-            callJs(id, false, "parse");
+            return "parse|" + e.getClass().getSimpleName();
         } finally {
             if (c != null) c.disconnect();
         }
