@@ -4,9 +4,9 @@ Persönliche Fitness- und Ernährungs-App für Android: Kalorien und Makros, Fot
 
 ## Installieren
 
-Neueste Version herunterladen: [fit-bis-april.apk](https://github.com/Rapida88/fitness-app/releases/latest/download/fit-bis-april.apk)
+Neueste Version herunterladen: [fit-bis-april.apk](https://raw.githubusercontent.com/Rapida88/fitness-app/main/dist/fit-bis-april.apk)
 
-Die App sucht beim Start selbst nach Updates (`version.json` im neuesten Release) und installiert sie nach Rückfrage.
+Die App sucht beim Start selbst nach Updates (`dist/version.json`) und installiert sie nach Rückfrage.
 
 ## Aufbau
 
