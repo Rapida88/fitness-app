@@ -1,6 +1,6 @@
 {
-  "versionCode": 5,
-  "versionName": "1.4",
+  "versionCode": 6,
+  "versionName": "1.5",
   "apkUrl": "https://raw.githubusercontent.com/Rapida88/fitness-app/main/dist/fit-bis-april.apk",
-  "notes": "Extra-Training und eigene Übungen im Fitness-Tab, Rezeptideen zuverlässiger, Schritte vom Mi Band über Health Connect (ab Android 14)."
+  "notes": "Übungen aus dem Trainingsplan löschen und wiederherstellen. Bei leerem Gemini-Kontingent wechselt die App automatisch auf ein anderes Gemini-Modell."
 }

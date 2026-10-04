@@ -155,17 +155,18 @@ textarea{resize:vertical;min-height:96px}
 .hcrow{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px}
 .hcbox{margin-top:12px;padding:12px;border-radius:var(--r-sm);background:var(--surface-2)}
 .wd.sel{box-shadow:0 0 0 2px var(--fg) inset}
-.ex{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
+.ex{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
 .ex:first-of-type{border-top:0}
 .check{width:28px;height:28px;border-radius:9px;border:2px solid var(--line);background:transparent;display:grid;place-items:center;transition:all .2s;padding:0}
 .check svg{width:16px;height:16px;stroke:var(--on-accent);stroke-width:3;fill:none;opacity:0;transform:scale(.6);transition:all .2s}
 .check.on{background:var(--accent);border-color:var(--accent)}
 .check.on svg{opacity:1;transform:none}
-.ex .nm{font-weight:600}
+.ex .nm{font-weight:600;hyphens:auto;-webkit-hyphens:auto;overflow-wrap:break-word}
 .ex.on .nm{color:var(--muted);text-decoration:line-through;text-decoration-thickness:1.5px}
 .ex .sc{font-size:12px;color:var(--muted)}
 .kg{display:flex;align-items:center;gap:4px}
-.kg input{width:66px;padding:7px 8px;text-align:right}
+.kg input{width:58px;padding:7px 8px;text-align:right}
+.ex .kg span{display:none}
 .kg span{font-size:12px;color:var(--muted)}
 .kg button{border:0;background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:11px;border-radius:8px;padding:7px 6px}
 .progress{height:6px;border-radius:99px;background:var(--surface-2);overflow:hidden;margin-top:6px}
@@ -343,7 +344,7 @@ function defaults(){return{
 function normalize(o){
   const d=defaults();
   if(!o||typeof o!=="object")return d;
-  return{v:1,settings:Object.assign(d.settings,o.settings||{}),weights:o.weights&&typeof o.weights==="object"?o.weights:d.weights,lifts:o.lifts||{},shop:Array.isArray(o.shop)?o.shop:[],recipes:Array.isArray(o.recipes)?o.recipes:[],days:o.days&&typeof o.days==="object"?o.days:{}};
+  return{v:1,settings:Object.assign(d.settings,o.settings||{}),weights:o.weights&&typeof o.weights==="object"?o.weights:d.weights,lifts:o.lifts||{},shop:Array.isArray(o.shop)?o.shop:[],recipes:Array.isArray(o.recipes)?o.recipes:[],hidden:o.hidden&&typeof o.hidden==="object"?o.hidden:{},days:o.days&&typeof o.days==="object"?o.days:{}};
 }
 const LS="fitapp-chris-v1";
 let state=normalize(null);
@@ -375,7 +376,7 @@ function changed(key){
 }
 function refFor(k){return db.doc("data/users/"+uid+"/"+(k==="profile"?"profile":"day-"+k))}
 function bodyFor(k){
-  if(k==="profile")return JSON.parse(JSON.stringify({settings:state.settings,weights:state.weights,lifts:state.lifts,shop:state.shop||[],recipes:state.recipes||[]}));
+  if(k==="profile")return JSON.parse(JSON.stringify({settings:state.settings,weights:state.weights,lifts:state.lifts,shop:state.shop||[],recipes:state.recipes||[],hidden:state.hidden||{}}));
   return JSON.parse(JSON.stringify(state.days[k]||{}));
 }
 async function flush(){
@@ -407,7 +408,7 @@ async function initStore(){
     }else{
       snap.docs.forEach(doc=>{
         const b=doc.data()||{};
-        if(doc.id==="profile"){if(!pre.has("profile")){const n=normalize(Object.assign({},b,{days:state.days}));state.settings=n.settings;state.weights=n.weights;state.lifts=n.lifts;state.shop=n.shop;state.recipes=n.recipes}}
+        if(doc.id==="profile"){if(!pre.has("profile")){const n=normalize(Object.assign({},b,{days:state.days}));state.settings=n.settings;state.weights=n.weights;state.lifts=n.lifts;state.shop=n.shop;state.recipes=n.recipes;state.hidden=n.hidden}}
         else if(doc.id.indexOf("day-")===0){const k=doc.id.slice(4);if(!pre.has(k))state.days[k]=JSON.parse(JSON.stringify(b))}
       });
       pre.forEach(k=>dirty.add(k));
@@ -434,6 +435,7 @@ function phaseInfo(week){
 }
 function stepGoal(s){return planWeek(s)>=5?8000:7000}
 function weekSchedule(s){return diffDays(state.settings.planStart,monday(s))<0?{}:schedule(planWeek(s))}
+function exOf(k){const h=(state.hidden||{})[k]||[];return PLANS[k].ex.filter(e=>!h.includes(e[0]))}
 function sessionFor(s){const k=weekSchedule(s)[dow(s)];return k?{key:k,plan:PLANS[k]}:null}
 
 /* ---------- UI-Zustand ---------- */
@@ -515,8 +517,8 @@ function viewStart(){
   const d=day(cur);const sg=stepGoal(cur);const steps=d.steps;
   const sess=sessionFor(cur);
   let sessLine;
-  if(sess){const doneN=sess.plan.ex.filter(e=>d.done[e[0]]).length;sessLine='<span class="pill acc">'+esc(sess.plan.label)+' · '+doneN+'/'+sess.plan.ex.length+'</span>'}
-  else if(PLANS[d.xplan]){const p=PLANS[d.xplan];const doneN=p.ex.filter(e=>d.done[e[0]]).length;sessLine='<span class="pill acc">Extra: '+esc(p.label)+' · '+doneN+'/'+p.ex.length+'</span>'}
+  if(sess){const ex=exOf(sess.key);const doneN=ex.filter(e=>d.done[e[0]]).length;sessLine='<span class="pill acc">'+esc(sess.plan.label)+' · '+doneN+'/'+ex.length+'</span>'}
+  else if(PLANS[d.xplan]){const p=PLANS[d.xplan];const ex=exOf(d.xplan);const doneN=ex.filter(e=>d.done[e[0]]).length;sessLine='<span class="pill acc">Extra: '+esc(p.label)+' · '+doneN+'/'+ex.length+'</span>'}
   else sessLine='<span class="pill">Ruhetag</span>';
   if(Array.isArray(d.xlog)&&d.xlog.length)sessLine+=' <span class="pill acc">+'+d.xlog.length+' eigene Übung'+(d.xlog.length>1?"en":"")+'</span>';
   return `
@@ -631,14 +633,14 @@ function viewFit(){
   if(fitSel==null||monday(fitSel)!==mon)fitSel=cur;
   const daysHtml=WD.map((n,i)=>{const s=addDays(mon,i);const k=sch[i];const dd=state.days[s];
     const xk=!k&&dd&&PLANS[dd.xplan]?dd.xplan:null;const kk=k||xk;const xn=dd&&dd.xlog?dd.xlog.length:0;
-    const all=(kk&&dd&&dd.done&&PLANS[kk].ex.every(e=>dd.done[e[0]]))||(!kk&&xn>0);
+    const all=(kk&&dd&&dd.done&&exOf(kk).every(e=>dd.done[e[0]]))||(!kk&&xn>0);
     const lab=k?PLANS[k].short:xk?"+"+PLANS[xk].short.replace("GK ",""):xn?"+":"";
     return `<button class="wd${kk||xn?" has":""}${all?" done":""}${s===fitSel?" sel":""}" data-act="fitDay" data-d="${s}"><span>${n}</span><span class="n num">${parse(s).getDate()}</span><span class="s">${lab}</span></button>`}).join("");
   const k0=sch[dow(fitSel)];const dx=state.days[fitSel];const xk=!k0&&dx&&PLANS[dx.xplan]?dx.xplan:null;const k=k0||xk;let sessHtml;
-  if(k){const p=PLANS[k];const d=day(fitSel);const doneN=p.ex.filter(e=>d.done[e[0]]).length;
-    const rows=p.ex.map(([name,scheme,isTime])=>{const on=!!d.done[name];const kg=state.lifts[name];
-      return `<div class="ex${on?" on":""}"><button class="check${on?" on":""}" data-act="toggleEx" data-name="${esc(name)}" aria-pressed="${on}" aria-label="${esc(name)} erledigt"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button><div style="min-width:0"><div class="nm">${esc(name)}</div><div class="sc num">${esc(scheme)}</div></div>${isTime?'<span class="sc">Körpergewicht</span>':`<div class="kg"><input type="number" inputmode="decimal" step="0.5" min="0" value="${kg!=null?kg:""}" placeholder="kg" data-lift="${esc(name)}" aria-label="Gewicht ${esc(name)} in kg"><span>kg</span><button data-act="plus25" data-name="${esc(name)}" aria-label="2,5 kg mehr">+2,5</button></div>`}</div>`}).join("");
-    sessHtml=`<section class="card"><h2>${xk?"Extra: ":""}${esc(p.label)} <span class="sub num">${esc(fmtDate(fitSel))} · ${doneN}/${p.ex.length}</span></h2><div class="progress" style="margin:-4px 0 6px"><i data-w="${doneN/p.ex.length*100}%"></i></div>${rows}<p class="note" style="margin:12px 0 0">${esc(ph.tip)}${wk>=9?"":" Optional: 10–15 Min. zügig auf dem Laufband mit Steigung."}</p>${xk?'<div class="rowbtns" style="margin-top:12px"><button class="btn ghost sm" data-act="xplanDel">Extra-Training entfernen</button></div>':""}</section>`;
+  if(k){const p=PLANS[k];const ex=exOf(k);const hid=((state.hidden||{})[k]||[]).length;const d=day(fitSel);const doneN=ex.filter(e=>d.done[e[0]]).length;
+    const rows=ex.map(([name,scheme,isTime])=>{const on=!!d.done[name];const kg=state.lifts[name];
+      return `<div class="ex${on?" on":""}"><button class="check${on?" on":""}" data-act="toggleEx" data-name="${esc(name)}" aria-pressed="${on}" aria-label="${esc(name)} erledigt"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button><div style="min-width:0"><div class="nm">${esc(name)}</div><div class="sc num">${esc(scheme)}</div></div>${isTime?'<span class="sc">Körpergewicht</span>':`<div class="kg"><input type="number" inputmode="decimal" step="0.5" min="0" value="${kg!=null?kg:""}" placeholder="kg" data-lift="${esc(name)}" aria-label="Gewicht ${esc(name)} in kg"><span>kg</span><button data-act="plus25" data-name="${esc(name)}" aria-label="2,5 kg mehr">+2,5</button></div>`}<button class="del" data-act="exHide" data-k="${k}" data-name="${esc(name)}" aria-label="${esc(name)} aus dem Plan löschen">×</button></div>`}).join("");
+    sessHtml=`<section class="card"><h2>${xk?"Extra: ":""}${esc(p.label)} <span class="sub num">${esc(fmtDate(fitSel))} · ${doneN}/${ex.length}</span></h2><div class="progress" style="margin:-4px 0 6px"><i data-w="${ex.length?doneN/ex.length*100:0}%"></i></div>${rows||'<div class="empty">Alle Übungen dieses Plans sind gelöscht.</div>'}${hid?`<div class="hcrow"><span class="small muted">${hid} Übung${hid>1?"en":""} aus ${esc(p.label)} gelöscht</span><button class="btn ghost sm" data-act="exRestore" data-k="${k}">Wiederherstellen</button></div>`:""}<p class="note" style="margin:12px 0 0">${esc(ph.tip)}${wk>=9?"":" Optional: 10–15 Min. zügig auf dem Laufband mit Steigung."}</p>${xk?'<div class="rowbtns" style="margin-top:12px"><button class="btn ghost sm" data-act="xplanDel">Extra-Training entfernen</button></div>':""}</section>`;
   }else{
     sessHtml=`<section class="card"><h2>Ruhetag <span class="sub">${esc(fmtDate(fitSel))}</span></h2><p class="small muted" style="margin:0">Kein Krafttraining geplant. Schrittziel: ${fmt(stepGoal(fitSel))} Schritte. Ein Spaziergang zählt.</p>
       <p class="small" style="margin:14px 0 8px;font-weight:600">Trotzdem im Studio gewesen? Wähle dein Training:</p>
@@ -778,15 +780,25 @@ window.__fitCb=function(id,ok,text){const p=pending[id];if(!p)return;delete pend
 function shrink(file){return new Promise((res,rej)=>{const img=new Image();const u=URL.createObjectURL(file);
   img.onload=()=>{const m=1280,sc=Math.min(1,m/Math.max(img.naturalWidth,img.naturalHeight));const c=document.createElement("canvas");c.width=Math.round(img.naturalWidth*sc);c.height=Math.round(img.naturalHeight*sc);c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL("image/jpeg",0.82).split(",")[1])};
   img.onerror=()=>{URL.revokeObjectURL(u);rej({code:"image_rejected"})};img.src=u})}
-function aiErrText(c){c=String(c||"");if(/^api_5/.test(c))return"Gemini ist gerade überlastet. Versuch es in einer Minute nochmal.";if(c==="refused")return"Gemini wollte dazu keine Antwort geben. Versuch es nochmal.";if(c==="too_long")return"Die Antwort wurde zu lang und abgeschnitten. Versuch es nochmal.";return {no_key:"Dafür brauchst du einen Gemini-API-Schlüssel. Trag ihn über das Zahnrad oben rechts ein.",bad_key:"Der Gemini-API-Schlüssel stimmt nicht. Prüfe ihn über das Zahnrad oben rechts.",model:"Das Gemini-Modell wurde nicht gefunden. Prüfe den Modellnamen über das Zahnrad oben rechts.",quota:"Dein Gemini-Kontingent ist gerade aufgebraucht. Warte etwas oder prüfe dein Konto in Google AI Studio.",offline:"Keine Internetverbindung. Versuch es gleich nochmal.",parse:"Die Antwort war unvollständig. Versuch es nochmal."}[c]||""}
+function aiErrText(c){c=String(c||"");if(/^api_5/.test(c))return"Gemini ist gerade überlastet. Versuch es in einer Minute nochmal.";if(c==="refused")return"Gemini wollte dazu keine Antwort geben. Versuch es nochmal.";if(c==="too_long")return"Die Antwort wurde zu lang und abgeschnitten. Versuch es nochmal.";return {no_key:"Dafür brauchst du einen Gemini-API-Schlüssel. Trag ihn über das Zahnrad oben rechts ein.",bad_key:"Der Gemini-API-Schlüssel stimmt nicht. Prüfe ihn über das Zahnrad oben rechts.",model:"Das Gemini-Modell wurde nicht gefunden. Prüfe den Modellnamen über das Zahnrad oben rechts.",quota:"Dein Gemini-Kontingent ist bei allen Modellen aufgebraucht, die ich probiert habe. Meist ist es nach einer Minute oder am nächsten Tag wieder frei.",offline:"Keine Internetverbindung. Versuch es gleich nochmal.",parse:"Die Antwort war unvollständig. Versuch es nochmal."}[c]||""}
 async function androidAI(prompt,file,signal){
   const key=apiKey();if(!key)throw{code:"no_key"};
-  const b64=file?await shrink(file):"";const id="c"+(++cbSeq);
-  const text=await new Promise((res,rej)=>{pending[id]={res,rej};
-    if(signal)signal.addEventListener("abort",()=>{if(pending[id]){delete pending[id];rej({code:"cancelled"})}});
-    window.AndroidBridge.gemini(b64,prompt,key,aiModel(),id)});
-  return parseAI(text);
+  const b64=file?await shrink(file):"";
+  const first=aiModel();const models=[first].concat(FALLBACK_MODELS.filter(m=>m!==first));
+  let last=null;
+  for(const m of models){
+    const id="c"+(++cbSeq);
+    try{
+      const text=await new Promise((res,rej)=>{pending[id]={res,rej};
+        if(signal)signal.addEventListener("abort",()=>{if(pending[id]){delete pending[id];rej({code:"cancelled"})}});
+        window.AndroidBridge.gemini(b64,prompt,key,m,id)});
+      if(m!==first){try{localStorage.setItem(MODEL_LS,m)}catch(e){}toast("Gemini-Modell gewechselt: "+m)}
+      return parseAI(text);
+    }catch(e){const c=String(e&&e.code||"").split("|")[0];if(c!=="quota"&&c!=="model")throw e;last=e}
+  }
+  throw last;
 }
+const FALLBACK_MODELS=["gemini-2.5-flash","gemini-2.5-flash-lite","gemini-2.0-flash","gemini-flash-lite-latest"];
 function parseAI(text){
   let t=String(text||"").trim().replace(/^```(?:json)?\s*/i,"").replace(/```\s*$/,"").trim();
   const tries=[t];const a=t.search(/[\[{]/),b=Math.max(t.lastIndexOf("}"),t.lastIndexOf("]"));
@@ -958,6 +970,7 @@ Höchstens 10 Zutaten und 5 kurze Schritte pro Rezept. Zahlen ohne Anführungsze
   }catch(e){
     const c=e&&e.code?String(e.code):(e&&e.message?"js: "+e.message:"unbekannt");const base=c.split("|")[0];
     cookErr=aiErrText(base)||(base==="rate_limited"?"Gerade zu viele Anfragen. Versuch es gleich nochmal.":base==="not_granted"?"Du hast die Anfrage an Claude nicht erlaubt.":"Das hat nicht geklappt. Versuch es nochmal. (Fehler: "+c.slice(0,140)+")");
+    if(base==="quota"&&c.includes("|")&&c.split("|")[1])cookErr+=" Google meldet: "+c.split("|")[1].slice(0,120);
   }
   cookBusy=false;render();
 }
@@ -1030,6 +1043,8 @@ document.addEventListener("click",async e=>{
   else if(a==="hcConnect"){hcAsked=true;AndroidBridge.stepsConnect()}
   else if(a==="hcSettings"){AndroidBridge.stepsSettings()}
   else if(a==="hcSync"){hcSync(true)}
+  else if(a==="exHide"){const k=b.dataset.k,n=b.dataset.name;state.hidden=state.hidden||{};const h=state.hidden[k]=state.hidden[k]||[];if(!h.includes(n))h.push(n);changed("profile");render();toast(n+" gelöscht")}
+  else if(a==="exRestore"){state.hidden=state.hidden||{};delete state.hidden[b.dataset.k];changed("profile");render();toast("Übungen wiederhergestellt")}
   else if(a==="plus25"){const n=b.dataset.name;state.lifts[n]=Math.round(((+state.lifts[n]||0)+2.5)*10)/10;changed("profile");render()}
   else if(a==="delWeight"){delete state.weights[b.dataset.d];changed("profile");render()}
   else if(a==="mood"||a==="energy"){const d=day(cur,true);d.diary=d.diary||{};const v=+b.dataset.v;d.diary[a]=d.diary[a]===v?null:v;changed(cur);render()}

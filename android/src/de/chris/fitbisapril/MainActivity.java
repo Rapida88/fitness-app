@@ -364,7 +364,7 @@ public class MainActivity extends Activity {
             if (code == 400 && resp.contains("API key")) return "bad_key";
             if (code == 401 || code == 403) return "bad_key";
             if (code == 404) return "model";
-            if (code == 429) return "quota";
+            if (code == 429) return "quota|" + apiMessage(resp);
             if (code >= 400) return "api_" + code + "|" + apiMessage(resp);
 
             JSONObject r = new JSONObject(resp);
