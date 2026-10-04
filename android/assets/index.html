@@ -207,6 +207,37 @@ textarea{resize:vertical;min-height:96px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .found{font-size:13px;color:var(--muted);margin:0;padding-left:18px}
 
+
+/* Kochen */
+.filters{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.filters button{flex:none;border:0;border-radius:99px;padding:8px 14px;background:var(--surface);box-shadow:var(--shadow);font-size:13px;font-weight:700;color:var(--muted)}
+.filters button.on{background:var(--accent);color:var(--on-accent)}
+.rcard{padding:0;overflow:hidden}
+.rcard.open{display:flex;flex-direction:column;gap:12px;padding-bottom:16px}
+.rcard.open>:not(.rhead){margin-inline:18px}
+.rhead{width:100%;border:0;background:transparent;text-align:left;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 18px}
+.rhead b{display:block;font-family:var(--font-display);font-size:15px;font-weight:600}
+.rhead small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.rhead .pill{flex:none}
+.porrow{display:flex;justify-content:space-between;align-items:center}
+.stepper{display:flex;align-items:center;gap:12px}
+.stepper button{width:34px;height:34px;border-radius:50%;border:0;background:var(--accent-soft);color:var(--accent);font-size:18px;font-weight:700}
+.ings{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.ings li{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.ings li:first-child{border-top:0}
+.ings em,.sitem em{font-style:normal;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-soft);padding:1px 6px;border-radius:6px;margin-left:4px}
+.rsteps{margin:0;padding-left:20px;font-size:14px;display:flex;flex-direction:column;gap:6px}
+.sgroup{margin-top:16px;display:flex;flex-direction:column}
+.sgroup .eyebrow{margin-bottom:4px}
+.sitem{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.sitem .nm{font-weight:600;overflow-wrap:anywhere}
+.sitem .sc{font-size:11px;color:var(--muted)}
+.sitem .qty{font-size:13px;font-weight:700;color:var(--muted)}
+.sitem.on .nm{text-decoration:line-through;color:var(--muted)}
+.btn:disabled{opacity:.45;cursor:default}
+nav.tabs .in{grid-template-columns:repeat(5,1fr)!important}
+nav.tabs button{font-size:10.5px}
+
 /* Tab bar */
 nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:10;background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px))}
 nav.tabs .in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
@@ -253,6 +284,7 @@ nav.tabs button.on svg{transform:translateY(-2px)}
     <button data-tab="start"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/></svg>Start</button>
     <button data-tab="meals"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3.5"/></svg>Mahlzeiten</button>
     <button data-tab="fit"><svg viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg>Fitness</button>
+    <button data-tab="cook"><svg viewBox="0 0 24 24"><path d="M5 11h14v2a7 7 0 0 1-14 0z"/><path d="M3 11h18M9 4c0 1.5 1 1.5 1 3M13 4c0 1.5 1 1.5 1 3"/></svg>Kochen</button>
     <button data-tab="diary"><svg viewBox="0 0 24 24"><path d="M6 3h11a2 2 0 0 1 2 2v16H7a2 2 0 0 1-2-2V4a1 1 0 0 1 1-1z"/><path d="M9 8h6M9 12h6"/></svg>Tagebuch</button>
   </div>
 </nav>
@@ -261,8 +293,10 @@ nav.tabs button.on svg{transform:translateY(-2px)}
 (function(){
 "use strict";
 const ANDROID=!!window.AndroidBridge;
-const KEY_LS="fitapp-apikey";
+const AI_NAME=ANDROID?"Gemini":"Claude";
+const KEY_LS="fitapp-gemini-key",MODEL_LS="fitapp-gemini-model",DEFAULT_MODEL="gemini-flash-latest";
 function apiKey(){try{return localStorage.getItem(KEY_LS)||""}catch(e){return ""}}
+function aiModel(){try{return localStorage.getItem(MODEL_LS)||DEFAULT_MODEL}catch(e){return DEFAULT_MODEL}}
 /* ---------- Plan-Daten ---------- */
 const MEALS=[["fruehstueck","Frühstück"],["mittag","Mittag"],["abend","Abend"],["snacks","Snacks"]];
 const SUGGEST=[
@@ -299,12 +333,14 @@ function defaults(){return{
   settings:{kcal:1900,p:160,c:180,f:60,minKcal:1500,startWeight:88,goalWeight:75,startDate:"2026-10-03",planStart:"2026-10-05",goalDate:"2027-04-03"},
   weights:{"2026-10-03":88},
   lifts:{},
+  shop:[],
+  recipes:[],
   days:{}
 }}
 function normalize(o){
   const d=defaults();
   if(!o||typeof o!=="object")return d;
-  return{v:1,settings:Object.assign(d.settings,o.settings||{}),weights:o.weights&&typeof o.weights==="object"?o.weights:d.weights,lifts:o.lifts||{},days:o.days&&typeof o.days==="object"?o.days:{}};
+  return{v:1,settings:Object.assign(d.settings,o.settings||{}),weights:o.weights&&typeof o.weights==="object"?o.weights:d.weights,lifts:o.lifts||{},shop:Array.isArray(o.shop)?o.shop:[],recipes:Array.isArray(o.recipes)?o.recipes:[],days:o.days&&typeof o.days==="object"?o.days:{}};
 }
 const LS="fitapp-chris-v1";
 let state=normalize(null);
@@ -336,7 +372,7 @@ function changed(key){
 }
 function refFor(k){return db.doc("data/users/"+uid+"/"+(k==="profile"?"profile":"day-"+k))}
 function bodyFor(k){
-  if(k==="profile")return{settings:state.settings,weights:state.weights,lifts:state.lifts};
+  if(k==="profile")return JSON.parse(JSON.stringify({settings:state.settings,weights:state.weights,lifts:state.lifts,shop:state.shop||[],recipes:state.recipes||[]}));
   return JSON.parse(JSON.stringify(state.days[k]||{}));
 }
 async function flush(){
@@ -368,7 +404,7 @@ async function initStore(){
     }else{
       snap.docs.forEach(doc=>{
         const b=doc.data()||{};
-        if(doc.id==="profile"){if(!pre.has("profile")){const n=normalize(Object.assign({},b,{days:state.days}));state.settings=n.settings;state.weights=n.weights;state.lifts=n.lifts}}
+        if(doc.id==="profile"){if(!pre.has("profile")){const n=normalize(Object.assign({},b,{days:state.days}));state.settings=n.settings;state.weights=n.weights;state.lifts=n.lifts;state.shop=n.shop;state.recipes=n.recipes}}
         else if(doc.id.indexOf("day-")===0){const k=doc.id.slice(4);if(!pre.has(k))state.days[k]=JSON.parse(JSON.stringify(b))}
       });
       pre.forEach(k=>dirty.add(k));
@@ -405,7 +441,7 @@ function defaultSlot(){const h=new Date().getHours();return h<11?"fruehstueck":h
 try{const t=localStorage.getItem(LS+"-tab");if(t)tab=t}catch(e){}
 const main=document.getElementById("main");
 
-function toast(msg){const t=document.createElement("div");t.className="toast";t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),1800)}
+function toast(msg){document.querySelectorAll(".toast").forEach(x=>x.remove());const t=document.createElement("div");t.className="toast";t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),1800)}
 function latestWeight(upTo){
   const ks=Object.keys(state.weights).filter(k=>!upTo||k<=upTo).sort();
   return ks.length?{date:ks[ks.length-1],kg:+state.weights[ks[ks.length-1]]}:null;
@@ -441,7 +477,7 @@ function render(){
   document.getElementById("dateLbl").innerHTML=(isToday?"Heute":cur===addDays(TODAY,-1)?"Gestern":cur===addDays(TODAY,1)?"Morgen":esc(fmtDate(cur,{weekday:"long"})))+" <span>· "+esc(fmtDate(cur,{day:"numeric",month:"long",year:"numeric"}))+"</span>";
   const wk=planWeek(cur);const ph=phaseInfo(wk);
   document.getElementById("phaseLbl").textContent="Woche "+wk+" · "+ph.name;
-  main.innerHTML='<div class="view">'+({start:viewStart,meals:viewMeals,fit:viewFit,diary:viewDiary}[tab]||viewStart)()+"</div>";
+  main.innerHTML='<div class="view">'+({start:viewStart,meals:viewMeals,fit:viewFit,cook:viewCook,diary:viewDiary}[tab]||viewStart)()+"</div>";
   requestAnimationFrame(()=>requestAnimationFrame(animateIn));
 }
 function animateIn(){
@@ -632,9 +668,9 @@ function photoCard(){
   const slot=(photo&&photo.slot)||defaultSlot();
   const slots=MEALS.map(([k,l])=>`<button class="${k===slot?"on":""}" data-act="photoSlot" data-slot="${k}">${l}</button>`).join("");
   const cam=`<label class="cambtn" for="photoIn"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>${photo?"Neues Foto":"Essen fotografieren"}</label><input id="photoIn" type="file" accept="${esc(vision.accept)}" capture="environment" hidden>`;
-  if(!photo)return `<section class="card photo"><h2>Foto-Erkennung <span class="sub">kcal per Foto</span></h2>${cam}<p class="small muted" style="margin:0">Mach ein Foto von deinem Teller. Claude schätzt Kalorien und Makros, du prüfst kurz und trägst ein.</p></section>`;
+  if(!photo)return `<section class="card photo"><h2>Foto-Erkennung <span class="sub">kcal per Foto</span></h2>${cam}<p class="small muted" style="margin:0">Mach ein Foto von deinem Teller. ${AI_NAME} schätzt Kalorien und Makros, du prüfst kurz und trägst ein.</p></section>`;
   let body="";
-  if(photo.status==="busy")body=`<div class="thinking"><i></i><span>Claude schaut sich dein Essen an…</span></div><button class="btn ghost sm" data-act="photoCancel">Abbrechen</button>`;
+  if(photo.status==="busy")body=`<div class="thinking"><i></i><span>${AI_NAME} schaut sich dein Essen an…</span></div><button class="btn ghost sm" data-act="photoCancel">Abbrechen</button>`;
   else if(photo.status==="error")body=`<p class="note" style="margin:0;color:var(--warn)">${esc(photo.err)}</p><div class="rowbtns"><button class="btn sm" data-act="photoRetry">Nochmal versuchen</button><button class="btn ghost sm" data-act="photoClear">Verwerfen</button></div>`;
   else if(photo.status==="done"){const r=photo.res;
     body=`<div class="field"><label for="pf-name">Gericht</label><input id="pf-name" type="text" value="${esc(r.name)}"></div>
@@ -663,7 +699,7 @@ Ziel des Nutzers: abnehmen und Muskeln aufbauen, ${st.kcal} kcal und ${st.p} g E
 Wenn auf dem Foto kein Essen zu sehen ist, antworte {"essen": false}.`;
   photoAbort=new AbortController();
   try{
-    const r=vision.android?await androidAnalyze(prompt,photo.file,photoAbort.signal):await vision.sample.json(prompt,{images:photo.file,signal:photoAbort.signal,cache:false});
+    const r=vision.android?await androidAI(prompt,photo.file,photoAbort.signal):await vision.sample.json(prompt,{images:photo.file,signal:photoAbort.signal,cache:false});
     if(!r||r.essen===false){photo.status="error";photo.err="Auf dem Foto konnte ich kein Essen erkennen. Versuch es mit einem Foto von oben auf den Teller.";}
     else{const n=v=>Math.max(0,Math.round(+v||0));
       photo.res={name:String(r.name||"Mahlzeit vom Foto").slice(0,80),kcal:n(r.kcal),p:n(r.eiweiss),c:n(r.kohlenhydrate),f:n(r.fett),items:Array.isArray(r.bestandteile)?r.bestandteile.slice(0,8).map(String):[],tip:r.tipp?String(r.tipp).slice(0,240):""};
@@ -671,7 +707,7 @@ Wenn auf dem Foto kein Essen zu sehen ist, antworte {"essen": false}.`;
   }catch(e){
     if(e&&e.code==="cancelled"){photo=null}
     else{photo.status="error";const c=e&&e.code;
-      photo.err=c==="not_granted"?"Du hast die Foto-Analyse nicht erlaubt. Du kannst sie beim nächsten Öffnen der App freigeben.":c==="rate_limited"?"Gerade zu viele Anfragen. Warte kurz und versuch es dann nochmal.":c==="image_rejected"?"Dieses Bild kann ich nicht lesen. Nimm bitte ein JPG- oder PNG-Foto.":c==="refused"?"Zu diesem Foto kann ich keine Schätzung abgeben.":c==="no_key"?"Für die Foto-Erkennung brauchst du einen Claude-API-Schlüssel. Trag ihn über das Zahnrad oben rechts ein.":c==="bad_key"?"Der API-Schlüssel stimmt nicht. Prüfe ihn über das Zahnrad oben rechts.":c==="offline"?"Keine Internetverbindung. Versuch es gleich nochmal.":c==="credit"?"Dein API-Guthaben ist aufgebraucht. Lade es in der Claude Console auf.":"Die Analyse hat nicht geklappt. Versuch es nochmal.";
+      photo.err=c==="not_granted"?"Du hast die Foto-Analyse nicht erlaubt. Du kannst sie beim nächsten Öffnen der App freigeben.":c==="rate_limited"?"Gerade zu viele Anfragen. Warte kurz und versuch es dann nochmal.":c==="image_rejected"?"Dieses Bild kann ich nicht lesen. Nimm bitte ein JPG- oder PNG-Foto.":c==="refused"?"Zu diesem Foto kann ich keine Schätzung abgeben.":aiErrText(c)||"Die Analyse hat nicht geklappt. Versuch es nochmal.";
       if(c==="not_granted"){vision=false}}
   }
   photoAbort=null;render();
@@ -682,25 +718,180 @@ window.__fitCb=function(id,ok,text){const p=pending[id];if(!p)return;delete pend
 function shrink(file){return new Promise((res,rej)=>{const img=new Image();const u=URL.createObjectURL(file);
   img.onload=()=>{const m=1280,sc=Math.min(1,m/Math.max(img.naturalWidth,img.naturalHeight));const c=document.createElement("canvas");c.width=Math.round(img.naturalWidth*sc);c.height=Math.round(img.naturalHeight*sc);c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL("image/jpeg",0.82).split(",")[1])};
   img.onerror=()=>{URL.revokeObjectURL(u);rej({code:"image_rejected"})};img.src=u})}
-async function androidAnalyze(prompt,file,signal){
+function aiErrText(c){return {no_key:"Dafür brauchst du einen Gemini-API-Schlüssel. Trag ihn über das Zahnrad oben rechts ein.",bad_key:"Der Gemini-API-Schlüssel stimmt nicht. Prüfe ihn über das Zahnrad oben rechts.",model:"Das Gemini-Modell wurde nicht gefunden. Prüfe den Modellnamen über das Zahnrad oben rechts.",quota:"Dein Gemini-Kontingent ist gerade aufgebraucht. Warte etwas oder prüfe dein Konto in Google AI Studio.",offline:"Keine Internetverbindung. Versuch es gleich nochmal.",parse:"Die Antwort war unvollständig. Versuch es nochmal."}[c]||""}
+async function androidAI(prompt,file,signal){
   const key=apiKey();if(!key)throw{code:"no_key"};
-  const b64=await shrink(file);const id="c"+(++cbSeq);
+  const b64=file?await shrink(file):"";const id="c"+(++cbSeq);
   const text=await new Promise((res,rej)=>{pending[id]={res,rej};
     if(signal)signal.addEventListener("abort",()=>{if(pending[id]){delete pending[id];rej({code:"cancelled"})}});
-    window.AndroidBridge.analyze(b64,prompt,key,id)});
+    window.AndroidBridge.gemini(b64,prompt,key,aiModel(),id)});
   const m=String(text).match(/\{[\s\S]*\}/);if(!m)throw{code:"parse"};
   return JSON.parse(m[0]);
 }
+let sampleNs=null;
 async function initVision(){
   if(ANDROID){vision={android:true,accept:"image/*"};if(tab==="meals")render();return}
   try{
     if(!window.claude||typeof claude.use!=="function")throw 0;
-    const smp=await claude.use("sample");if(!smp)throw 0;
+    const smp=await claude.use("sample");if(!smp)throw 0;sampleNs=smp;
     const lim=await smp.limits().catch(()=>null);
     if(!lim||!lim.images)throw 0;
     vision={sample:smp,accept:(lim.images.mediaTypes||["image/jpeg","image/png"]).join(",")};
   }catch(e){vision=false}
   if(tab==="meals")render();
+}
+
+/* ---------- Kochplan & Einkaufsliste ---------- */
+const CATS=[["obst","Obst & Gemüse"],["brot","Brot & Backwaren"],["kuehl","Kühlregal: Milchprodukte, Käse, Wurst"],["fleisch","Fleisch & Geflügel"],["trocken","Nudeln, Reis & Konserven"],["gewuerz","Gewürze, Öl & Soßen"],["tk","Tiefkühl"],["sonst","Sonstiges"]];
+const CAT_KEYS=CATS.map(c=>c[0]);
+const SLOT_LABEL={fruehstueck:"Frühstück",mittag:"Mittag",abend:"Abend",snacks:"Snack"};
+// Zutaten: [Name, Menge pro Portion, Einheit, Kategorie, Lidl-Hinweis]
+const RECIPES=[
+  {id:"wrap-pizza",name:"Wrap-Pizza",slot:"abend",min:15,kcal:700,p:55,c:65,f:23,tags:["Pizza","Schnell"],
+   ing:[["Vollkorn-Wraps",2,"Stk","brot",""],["Passierte Tomaten",80,"g","trocken","Baresa"],["Mozzarella light",125,"g","kuehl","Milbona"],["Kochschinken",100,"g","kuehl","Dulano"],["Paprika oder Champignons",100,"g","obst",""],["Oregano",1,"TL","gewuerz","Kania"]],
+   steps:["Ofen auf 220 °C vorheizen.","Wraps mit Tomatensoße bestreichen, mit Oregano würzen.","Schinken, Gemüse und zerzupften Mozzarella verteilen.","8 Minuten backen."]},
+  {id:"braten-light",name:"Schweinebraten light",slot:"mittag",min:20,prep:true,kcal:600,p:45,c:55,f:20,tags:["Meal-Prep","Klassiker"],
+   ing:[["Schweinerücken oder Schweinelachs",200,"g","fleisch","Metzgerfrisch"],["Semmelknödel im Kochbeutel",1,"Stk","trocken",""],["Sauerkraut",200,"g","trocken","Freshona"],["Bratensoße (Pulver)",1,"EL","gewuerz","Kania"],["Zwiebel",0.5,"Stk","obst",""]],
+   steps:["Am Sonntag für 3 Portionen garen: Fleisch salzen, pfeffern, mit Zwiebel bei 160 °C ca. 90 Min. im Bräter schmoren, Kruste weglassen.","In Scheiben schneiden und für 3 Tage portionieren.","Knödel nach Packung kochen, Sauerkraut erwärmen, Soße anrühren."],
+   note:"Die Menge gilt pro Portion. Für Meal-Prep 3 Portionen auf die Liste setzen."},
+  {id:"skyr-bowl",name:"Skyr-Bowl mit Beeren",slot:"fruehstueck",min:3,kcal:300,p:35,c:35,f:3,tags:["Schnell","Süß"],
+   ing:[["Skyr natur",250,"g","kuehl","Milbona"],["Beeren (TK)",80,"g","tk",""],["Haferflocken",20,"g","trocken","Crownfield"]],
+   steps:["Skyr in eine Schale geben.","Beeren und Haferflocken darüber, fertig."]},
+  {id:"overnight-oats",name:"Protein-Overnight-Oats",slot:"fruehstueck",min:5,kcal:440,p:45,c:45,f:6,tags:["Vorbereiten","Süß"],
+   ing:[["Haferflocken",50,"g","trocken","Crownfield"],["Skyr natur",150,"g","kuehl","Milbona"],["Whey-Protein",30,"g","sonst",""],["Beeren (TK)",100,"g","tk",""]],
+   steps:["Haferflocken, Skyr, Whey und 100 ml Wasser verrühren.","Beeren unterheben, über Nacht in den Kühlschrank."]},
+  {id:"haehnchen-bowl",name:"Hähnchen-Reis-Bowl",slot:"mittag",min:20,kcal:520,p:43,c:66,f:9,tags:["Meal-Prep"],
+   ing:[["Hähnchenbrustfilet",150,"g","fleisch","Metzgerfrisch"],["Basmatireis",70,"g","trocken",""],["Paprika",1,"Stk","obst",""],["Mais (Dose)",50,"g","trocken","Freshona"],["Rapsöl",1,"TL","gewuerz",""],["Sojasoße",1,"EL","gewuerz",""]],
+   steps:["Reis nach Packung kochen.","Hähnchen in Streifen schneiden und im Öl 6 Minuten braten.","Paprika dazu, 3 Minuten mitbraten, mit Sojasoße ablöschen.","Mit Reis und Mais in einer Schale anrichten."]},
+  {id:"bolognese",name:"Spaghetti Bolognese light",slot:"abend",min:25,kcal:600,p:45,c:70,f:14,tags:["Klassiker"],
+   ing:[["Rinderhack (5 % Fett)",125,"g","fleisch",""],["Vollkorn-Spaghetti",80,"g","trocken","Combino"],["Passierte Tomaten",200,"g","trocken","Baresa"],["Zwiebel",0.5,"Stk","obst",""],["Karotte",1,"Stk","obst",""],["Parmesan",20,"g","kuehl",""]],
+   steps:["Spaghetti nach Packung kochen.","Hack krümelig anbraten, Zwiebel und geriebene Karotte mitbraten.","Tomaten dazu, 10 Minuten köcheln, salzen und pfeffern.","Mit Parmesan servieren."]},
+  {id:"chili",name:"Chili con Carne",slot:"abend",min:25,prep:true,kcal:600,p:48,c:75,f:9,tags:["Meal-Prep","Scharf"],
+   ing:[["Rinderhack (5 % Fett)",125,"g","fleisch",""],["Kidneybohnen (Dose)",120,"g","trocken","Freshona"],["Mais (Dose)",80,"g","trocken","Freshona"],["Tomaten stückig (Dose)",200,"g","trocken","Baresa"],["Paprika",1,"Stk","obst",""],["Basmatireis",50,"g","trocken",""],["Chili-Gewürz",1,"TL","gewuerz","Kania"]],
+   steps:["Reis kochen.","Hack anbraten, gewürfelte Paprika dazu.","Tomaten, Bohnen, Mais und Gewürz dazu, 15 Minuten köcheln.","Hält sich 3 Tage im Kühlschrank."]},
+  {id:"pute-champignon",name:"Putengeschnetzeltes mit Champignons",slot:"mittag",min:20,kcal:540,p:45,c:62,f:11,tags:["Cremig"],
+   ing:[["Putenbrustfilet",150,"g","fleisch","Metzgerfrisch"],["Champignons",150,"g","obst",""],["Zwiebel",0.5,"Stk","obst",""],["Kochsahne 15 %",50,"ml","kuehl","Milbona"],["Basmatireis",70,"g","trocken",""]],
+   steps:["Reis kochen.","Pute in Streifen scharf anbraten, herausnehmen.","Zwiebel und Pilze braten, Sahne und etwas Wasser dazu.","Fleisch zurück in die Pfanne, kurz ziehen lassen."]},
+  {id:"gyros-teller",name:"Hähnchen-Gyros mit Tzatziki",slot:"abend",min:15,kcal:520,p:50,c:45,f:13,tags:["Schnell"],
+   ing:[["Hähnchengeschnetzeltes",180,"g","fleisch","Metzgerfrisch"],["Gyros-Gewürz",1,"TL","gewuerz","Kania"],["Tzatziki",100,"g","kuehl",""],["Fladenbrot",60,"g","brot",""],["Tomate",1,"Stk","obst",""],["Gurke",0.5,"Stk","obst",""]],
+   steps:["Hähnchen mit Gyros-Gewürz 7 Minuten kräftig braten.","Tomate und Gurke schneiden.","Mit Tzatziki und Fladenbrot anrichten."]},
+  {id:"ofenkartoffel",name:"Ofenkartoffeln mit Quark & Schinken",slot:"abend",min:35,kcal:510,p:50,c:60,f:5,tags:["Günstig"],
+   ing:[["Kartoffeln",350,"g","obst",""],["Magerquark",250,"g","kuehl","Milbona"],["Kochschinken",80,"g","kuehl","Dulano"],["Schnittlauch",0.5,"Bund","obst",""]],
+   steps:["Kartoffeln halbieren, bei 200 °C 30 Minuten backen.","Quark mit Schnittlauch, Salz und Pfeffer verrühren.","Schinken würfeln und mit dem Quark zu den Kartoffeln servieren."]},
+  {id:"omelett",name:"Schinken-Omelett mit Brot",slot:"abend",min:10,kcal:490,p:40,c:25,f:24,tags:["Schnell"],
+   ing:[["Eier",3,"Stk","kuehl",""],["Kochschinken",50,"g","kuehl","Dulano"],["Reibekäse light",30,"g","kuehl","Milbona"],["Paprika",0.5,"Stk","obst",""],["Vollkornbrot",1,"Scheibe","brot",""]],
+   steps:["Eier verquirlen, salzen.","Schinken und Paprika kurz anbraten, Eier darüber.","Käse darauf, Deckel drauf, 3 Minuten stocken lassen.","Mit Brot servieren."]},
+  {id:"curry",name:"Hähnchen-Curry mit Reis",slot:"mittag",min:25,prep:true,kcal:550,p:44,c:64,f:12,tags:["Meal-Prep"],
+   ing:[["Hähnchenbrustfilet",150,"g","fleisch","Metzgerfrisch"],["Kokosmilch light",100,"ml","trocken",""],["Rote Currypaste",1,"TL","gewuerz",""],["Gemüsemischung (TK)",150,"g","tk",""],["Basmatireis",70,"g","trocken",""]],
+   steps:["Reis kochen.","Hähnchen würfeln und anbraten.","Currypaste kurz mitrösten, Kokosmilch und Gemüse dazu.","8 Minuten köcheln lassen."]},
+  {id:"flammkuchen",name:"Flammkuchen-Wrap",slot:"abend",min:15,kcal:515,p:40,c:55,f:13,tags:["Pizza","Schnell"],
+   ing:[["Vollkorn-Wraps",2,"Stk","brot",""],["Magerquark",100,"g","kuehl","Milbona"],["Schmand",1,"EL","kuehl","Milbona"],["Schinkenwürfel light",80,"g","kuehl","Dulano"],["Rote Zwiebel",0.5,"Stk","obst",""]],
+   steps:["Ofen auf 220 °C vorheizen.","Quark mit Schmand, Salz und Pfeffer verrühren und auf die Wraps streichen.","Schinken und Zwiebelringe verteilen.","8 bis 10 Minuten knusprig backen."]},
+  {id:"burger-bowl",name:"Burger-Bowl",slot:"abend",min:15,kcal:470,p:40,c:42,f:14,tags:["Schnell"],
+   ing:[["Rinderhack (5 % Fett)",125,"g","fleisch",""],["Eisbergsalat",0.25,"Stk","obst",""],["Tomate",1,"Stk","obst",""],["Gewürzgurken",50,"g","trocken",""],["Burgersoße light",30,"g","gewuerz",""],["Vollkornbrötchen",1,"Stk","brot",""]],
+   steps:["Hack mit Salz und Pfeffer krümelig braten.","Salat, Tomate und Gurken schneiden.","Alles in eine Schale, Soße drüber, Brötchen dazu."]}
+];
+let cookTab="rezepte",cookFilter="alle",openRecipe=null,cookBusy=false,cookErr="",clearArmed=false;
+const portions={};
+function allRecipes(){return (state.recipes||[]).concat(RECIPES)}
+function findRecipe(id){return allRecipes().find(r=>r.id===id)}
+function fmtQty(q,u){const v=Math.round(q*100)/100;return fmt(v,v%1?2:0)+(u?" "+u:"")}
+function guessCat(n){n=n.toLowerCase();
+  const map=[["obst",/apfel|banane|beere|salat|tomate|gurke|paprika|zwiebel|karotte|möhre|kartoffel|pilz|champignon|zitrone|obst|gemüse|brokkoli|zucchini|knoblauch/],["brot",/brot|brötchen|wrap|toast|fladen/],["kuehl",/milch|quark|skyr|joghurt|käse|mozzarella|schinken|wurst|ei(er)?$|butter|sahne|tzatziki/],["fleisch",/hähnchen|pute|hack|rind|schwein|steak|fleisch/],["trocken",/reis|nudel|spaghetti|dose|bohnen|mais|hafer|mehl|linsen/],["gewuerz",/öl|salz|pfeffer|gewürz|soße|sauce|essig|senf|ketchup/],["tk",/tk|tiefkühl|gefroren/]];
+  for(const [k,re] of map)if(re.test(n))return k;return "sonst"}
+function addToShop(r,por){
+  state.shop=state.shop||[];
+  r.ing.forEach(([n,q,u,cat,hint])=>{
+    const key=(n+"|"+u).toLowerCase();
+    let it=state.shop.find(x=>!x.done&&(x.n+"|"+x.u).toLowerCase()===key);
+    if(!it){it={id:"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),n,q:0,u,cat:CAT_KEYS.includes(cat)?cat:guessCat(n),hint:hint||"",done:false,src:[]};state.shop.push(it)}
+    it.q=Math.round((it.q+(+q||0)*por)*100)/100;
+    if(it.src.indexOf(r.name)<0)it.src.push(r.name);
+  });
+  changed("profile");
+}
+function shopText(){
+  const open=(state.shop||[]).filter(x=>!x.done);
+  return "Einkaufsliste Lidl\n"+CATS.map(([k,l])=>{const its=open.filter(x=>x.cat===k);return its.length?"\n"+l+"\n"+its.map(x=>"- "+x.n+(x.q?" ("+fmtQty(x.q,x.u)+")":"")+(x.hint?" · "+x.hint:"")).join("\n"):""}).join("")
+}
+
+function viewCook(){
+  const seg=`<div class="slots" style="grid-template-columns:1fr 1fr">${[["rezepte","Rezepte"],["liste","Einkaufsliste"+((state.shop||[]).filter(x=>!x.done).length?" ("+(state.shop||[]).filter(x=>!x.done).length+")":"")]].map(([k,l])=>`<button class="${cookTab===k?"on":""}" data-act="cookTab" data-v="${k}">${l}</button>`).join("")}</div>`;
+  return seg+(cookTab==="liste"?viewShop():viewRecipes());
+}
+function viewRecipes(){
+  const st=state.settings,t=totals(cur);const left=st.kcal-t.kcal;
+  const filters=[["alle","Alle"],["fruehstueck","Frühstück"],["mittag","Mittag"],["abend","Abend"],["prep","Meal-Prep"],["eigene","Ideen"]];
+  const chips=`<div class="filters">${filters.map(([k,l])=>`<button class="${cookFilter===k?"on":""}" data-act="cookFilter" data-v="${k}">${l}</button>`).join("")}</div>`;
+  let list=allRecipes();
+  if(cookFilter==="prep")list=list.filter(r=>r.prep);
+  else if(cookFilter==="eigene")list=list.filter(r=>r.ai);
+  else if(cookFilter!=="alle")list=list.filter(r=>r.slot===cookFilter);
+  const cards=list.map(r=>{
+    const isOpen=openRecipe===r.id;const por=portions[r.id]||(r.prep?3:1);
+    const fits=r.kcal<=left;
+    const head=`<button class="rhead" data-act="openRecipe" data-id="${esc(r.id)}" aria-expanded="${isOpen}"><span style="min-width:0"><b>${esc(r.name)}</b><small class="num">${esc(SLOT_LABEL[r.slot]||"")} · ${r.min} Min. · ${fmt(r.kcal)} kcal · ${fmt(r.p)} E · ${fmt(r.c)} KH · ${fmt(r.f)} F</small></span><span class="pill ${fits?"good":""}">${fits?"passt heute":"über Rest"}</span></button>`;
+    if(!isOpen)return `<section class="card rcard">${head}</section>`;
+    const ings=r.ing.map(([n,q,u,cat,hint])=>`<li><span>${esc(n)}${hint?` <em>${esc(hint)}</em>`:""}</span><span class="num">${fmtQty(q*por,u)}</span></li>`).join("");
+    const steps=(r.steps||[]).map(x=>`<li>${esc(x)}</li>`).join("");
+    return `<section class="card rcard open">${head}
+      ${r.note?`<p class="note" style="margin:0">${esc(r.note)}</p>`:""}
+      <div class="porrow"><span class="eyebrow">Portionen</span><div class="stepper"><button data-act="por" data-id="${esc(r.id)}" data-d="-1" aria-label="Weniger Portionen">−</button><b class="num">${por}</b><button data-act="por" data-id="${esc(r.id)}" data-d="1" aria-label="Mehr Portionen">+</button></div></div>
+      <ul class="ings">${ings}</ul>
+      ${steps?`<ol class="rsteps">${steps}</ol>`:""}
+      <div class="rowbtns"><button class="btn" data-act="toShop" data-id="${esc(r.id)}">Auf die Einkaufsliste</button><button class="btn ghost" data-act="logRecipe" data-id="${esc(r.id)}">1 Portion eintragen</button>${r.ai?`<button class="btn danger sm" data-act="delRecipe" data-id="${esc(r.id)}">Löschen</button>`:""}</div>
+    </section>`;
+  }).join("")||'<section class="card"><div class="empty">Hier erscheinen deine neuen Rezeptideen. Tippe oben auf „Neue Ideen“.</div></section>';
+  const canAI=ANDROID||!!sampleNs;
+  const ai=`<section class="card"><h2>Neue Rezeptideen <span class="sub">${esc(AI_NAME)}</span></h2>
+    <p class="small muted" style="margin:0 0 12px">Drei schnelle Rezepte passend zu deinen restlichen ${fmt(Math.max(0,left))} kcal heute, mit Zutaten von Lidl.</p>
+    ${cookBusy?`<div class="thinking"><i></i><span>${esc(AI_NAME)} sucht Rezepte für dich…</span></div>`:`<button class="btn" data-act="aiRecipes" ${canAI?"":"disabled"}>Neue Ideen vorschlagen</button>`}
+    ${cookErr?`<p class="note" style="margin:12px 0 0;color:var(--warn)">${esc(cookErr)}</p>`:""}
+    ${canAI?"":`<p class="small muted" style="margin:10px 0 0">Neue Ideen gibt es in der Android-App oder wenn du die App in Claude öffnest.</p>`}
+  </section>`;
+  return chips+ai+cards;
+}
+function viewShop(){
+  const items=state.shop||[];const open=items.filter(x=>!x.done),done=items.filter(x=>x.done);
+  const add=`<form class="steps" id="shopForm"><input id="shopIn" type="text" placeholder="Artikel hinzufügen, z. B. Bananen" autocomplete="off"><button class="btn" type="submit">Hinzufügen</button></form>`;
+  if(!items.length)return `<section class="card"><h2>Einkaufsliste <span class="sub">Lidl</span></h2>${add}<div class="empty" style="margin-top:10px">Noch leer. Öffne ein Rezept und tippe auf „Auf die Einkaufsliste“.</div></section>`;
+  const row=x=>`<div class="sitem${x.done?" on":""}"><button class="check${x.done?" on":""}" data-act="shopToggle" data-id="${x.id}" aria-pressed="${x.done}" aria-label="${esc(x.n)} abhaken"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button><div style="min-width:0"><div class="nm">${esc(x.n)}${x.hint?` <em>${esc(x.hint)}</em>`:""}</div>${x.src&&x.src.length?`<div class="sc">${esc(x.src.join(", "))}</div>`:""}</div><span class="num qty">${x.q?fmtQty(x.q,x.u):""}</span><button class="del" data-act="shopDel" data-id="${x.id}" aria-label="${esc(x.n)} entfernen">×</button></div>`;
+  const groups=CATS.map(([k,l])=>{const its=open.filter(x=>x.cat===k);return its.length?`<div class="sgroup"><div class="eyebrow">${esc(l)}</div>${its.map(row).join("")}</div>`:""}).join("");
+  return `<section class="card"><h2>Einkaufsliste <span class="sub num">Lidl · ${open.length} offen</span></h2>
+    <p class="small muted" style="margin:0 0 12px">Sortiert nach dem typischen Weg durch eine Lidl-Filiale. Markennamen sind Lidl-Eigenmarken als Orientierung.</p>
+    ${add}${groups||'<div class="empty" style="margin-top:10px">Alles erledigt.</div>'}
+    ${done.length?`<div class="sgroup"><div class="eyebrow">Im Wagen (${done.length})</div>${done.map(row).join("")}</div>`:""}
+    <div class="rowbtns" style="margin-top:14px"><button class="btn ghost sm" data-act="shopShare">${ANDROID?"Liste teilen":"Liste kopieren"}</button>${done.length?`<button class="btn ghost sm" data-act="shopClean">Erledigte entfernen</button>`:""}<button class="btn danger sm" data-act="shopClear">${clearArmed?"Wirklich alles löschen?":"Liste leeren"}</button></div>
+  </section>`;
+}
+async function aiRecipes(){
+  const st=state.settings,t=totals(cur);
+  const left={kcal:Math.max(300,st.kcal-t.kcal),p:Math.max(0,st.p-t.p),c:Math.max(0,st.c-t.c),f:Math.max(0,st.f-t.f)};
+  const known=allRecipes().map(r=>r.name).join(", ");
+  const prompt=`Schlag 3 neue, schnelle Rezepte (höchstens 30 Minuten) für einen Mann vor, der abnehmen und Muskeln aufbauen will. Er isst gern Pizza und Schweinebraten mit Knödel, isst Fleisch, KEINE Meeresfrüchte und keinen Fisch, hat wenig Zeit zum Kochen und kauft bei Lidl in Deutschland ein.
+Jedes Rezept ist EINE Portion und soll zu seinem heutigen Rest passen: höchstens ${Math.round(left.kcal)} kcal, möglichst viel Eiweiß (Rest heute ${Math.round(left.p)} g). Tagesziel: ${st.kcal} kcal, ${st.p} g Eiweiß, ${st.c} g Kohlenhydrate, ${st.f} g Fett.
+Nicht wiederholen: ${known}.
+Nimm nur Zutaten, die es bei Lidl Deutschland gibt. Wenn passend, nenne bei einer Zutat die Lidl-Eigenmarke (z. B. Milbona, Dulano, Metzgerfrisch, Combino, Freshona, Baresa, Kania, Crownfield), sonst lass das Feld leer.
+Antworte NUR mit JSON in genau diesem Format:
+{"rezepte":[{"name":"...","mahlzeit":"fruehstueck|mittag|abend|snacks","minuten":Zahl,"kcal":Zahl,"eiweiss":Zahl,"kohlenhydrate":Zahl,"fett":Zahl,"zutaten":[{"name":"...","menge":Zahl,"einheit":"g|ml|Stk|EL|TL","kategorie":"obst|brot|kuehl|fleisch|trocken|gewuerz|tk|sonst","lidl":""}],"schritte":["..."]}]}`;
+  cookBusy=true;cookErr="";render();
+  try{
+    let r;
+    if(ANDROID)r=await androidAI(prompt,null,null);
+    else r=await sampleNs.json(prompt,{cache:false});
+    const arr=r&&Array.isArray(r.rezepte)?r.rezepte:[];
+    const n=v=>Math.max(0,Math.round(+v||0));
+    const made=arr.slice(0,3).map((x,i)=>({id:"ai-"+Date.now().toString(36)+i,ai:true,name:String(x.name||"Rezeptidee").slice(0,60),slot:SLOT_LABEL[x.mahlzeit]?x.mahlzeit:"abend",min:n(x.minuten)||20,kcal:n(x.kcal),p:n(x.eiweiss),c:n(x.kohlenhydrate),f:n(x.fett),
+      ing:(Array.isArray(x.zutaten)?x.zutaten:[]).slice(0,15).map(z=>[String(z.name||"").slice(0,60),+z.menge||0,String(z.einheit||"").slice(0,10),CAT_KEYS.includes(z.kategorie)?z.kategorie:guessCat(String(z.name||"")),String(z.lidl||"").slice(0,30)]).filter(z=>z[0]),
+      steps:(Array.isArray(x.schritte)?x.schritte:[]).slice(0,8).map(s=>String(s).slice(0,300))})).filter(x=>x.ing.length&&x.kcal);
+    if(!made.length)throw{code:"parse"};
+    state.recipes=made.concat(state.recipes||[]).slice(0,30);changed("profile");
+    cookFilter="eigene";openRecipe=made[0].id;
+  }catch(e){
+    const c=e&&e.code;
+    cookErr=aiErrText(c)||(c==="rate_limited"?"Gerade zu viele Anfragen. Versuch es gleich nochmal.":c==="not_granted"?"Du hast die Anfrage an Claude nicht erlaubt.":"Das hat nicht geklappt. Versuch es nochmal.");
+  }
+  cookBusy=false;render();
 }
 
 /* ---------- Einstellungen / Export ---------- */
@@ -722,9 +913,11 @@ function openSheet(){
     </div>
     <p class="small muted" style="margin:0">Untergrenze: nie unter ${fmt(st.minKcal)} kcal.</p>
     <div class="rowbtns"><button class="btn" data-act="saveSettings">Ziele speichern</button><button class="btn ghost" data-act="closeSheet">Schließen</button></div>
-    ${ANDROID?`<h3>Foto-Erkennung</h3>
-    <p class="small muted" style="margin:0">Die App schickt deine Essensfotos mit deinem eigenen Claude-API-Schlüssel an Claude. Den Schlüssel bekommst du unter console.anthropic.com. Er bleibt nur auf diesem Handy.</p>
-    <div class="steps"><input id="keyIn" type="password" autocomplete="off" placeholder="${apiKey()?"Schlüssel gespeichert":"sk-ant-…"}"><button class="btn" data-act="saveKey">Speichern</button></div>
+    ${ANDROID?`<h3>Gemini für Fotos und Rezepte</h3>
+    <p class="small muted" style="margin:0">Fotos und Rezeptideen gehen mit deinem eigenen Gemini-API-Schlüssel an Google Gemini. Den Schlüssel bekommst du kostenlos unter aistudio.google.com. Er bleibt nur auf diesem Handy.</p>
+    <div class="field"><label for="keyIn">API-Schlüssel</label><input id="keyIn" type="password" autocomplete="off" placeholder="${apiKey()?"Schlüssel gespeichert":"AIza…"}"></div>
+    <div class="field"><label for="modelIn">Modell</label><input id="modelIn" type="text" autocomplete="off" value="${esc(aiModel())}"></div>
+    <div class="rowbtns"><button class="btn" data-act="saveKey">Speichern</button></div>
     <h3>App</h3>
     <div class="rowbtns"><span class="pill num">Version ${esc(window.AndroidBridge.versionName())}</span><button class="btn ghost" data-act="checkUpdate">Nach Updates suchen</button></div>`:""}
     <h3>Daten exportieren / importieren</h3>
@@ -768,8 +961,23 @@ document.addEventListener("click",async e=>{
   else if(a==="mood"||a==="energy"){const d=day(cur,true);d.diary=d.diary||{};const v=+b.dataset.v;d.diary[a]=d.diary[a]===v?null:v;changed(cur);render()}
   else if(a==="saveNote"){const d=day(cur,true);d.diary=d.diary||{};d.diary.note=document.getElementById("noteIn").value.trim();changed(cur);render();toast("Notiz gespeichert")}
   else if(a==="photoSlot"){if(photo){photo.slot=b.dataset.slot;render()}}
+  else if(a==="cookTab"){cookTab=b.dataset.v;clearArmed=false;render()}
+  else if(a==="cookFilter"){cookFilter=b.dataset.v;render()}
+  else if(a==="openRecipe"){openRecipe=openRecipe===b.dataset.id?null:b.dataset.id;render()}
+  else if(a==="por"){const r=findRecipe(b.dataset.id);const cur0=portions[r.id]||(r.prep?3:1);portions[r.id]=Math.max(1,Math.min(10,cur0+(+b.dataset.d)));render()}
+  else if(a==="toShop"){const r=findRecipe(b.dataset.id);const por=portions[r.id]||(r.prep?3:1);addToShop(r,por);toast(r.ing.length+" Zutaten auf der Einkaufsliste")}
+  else if(a==="logRecipe"){const r=findRecipe(b.dataset.id);day(cur,true).meals[r.slot==="snacks"?"snacks":r.slot].push({name:r.name,kcal:r.kcal,p:r.p,c:r.c,f:r.f});changed(cur);toast(r.name+" eingetragen");render()}
+  else if(a==="delRecipe"){state.recipes=(state.recipes||[]).filter(r=>r.id!==b.dataset.id);openRecipe=null;changed("profile");render()}
+  else if(a==="aiRecipes"){if(!cookBusy)aiRecipes()}
+  else if(a==="shopToggle"){const it=(state.shop||[]).find(x=>x.id===b.dataset.id);if(it){it.done=!it.done;changed("profile");render()}}
+  else if(a==="shopDel"){state.shop=(state.shop||[]).filter(x=>x.id!==b.dataset.id);changed("profile");render()}
+  else if(a==="shopClean"){state.shop=(state.shop||[]).filter(x=>!x.done);changed("profile");render()}
+  else if(a==="shopClear"){if(!clearArmed){clearArmed=true;render();return}clearArmed=false;state.shop=[];changed("profile");render();toast("Liste geleert")}
+  else if(a==="shopShare"){const txt=shopText();if(ANDROID)window.AndroidBridge.share("Einkaufsliste",txt);else{try{await navigator.clipboard.writeText(txt);toast("Liste kopiert")}catch(x){toast("Kopieren ging nicht")}}}
   else if(a==="theme"){setTheme(b.dataset.v);document.querySelectorAll("#themeSeg button").forEach(x=>x.classList.toggle("on",x===b))}
-  else if(a==="saveKey"){const v=document.getElementById("keyIn").value.trim();try{if(v)localStorage.setItem(KEY_LS,v);else localStorage.removeItem(KEY_LS)}catch(x){}toast(v?"Schlüssel gespeichert":"Schlüssel entfernt");document.getElementById("keyIn").value="";document.getElementById("keyIn").placeholder=v?"Schlüssel gespeichert":"sk-ant-…"}
+  else if(a==="saveKey"){const v=document.getElementById("keyIn").value.trim();const m=document.getElementById("modelIn").value.trim()||DEFAULT_MODEL;
+    try{if(v)localStorage.setItem(KEY_LS,v);localStorage.setItem(MODEL_LS,m)}catch(x){}
+    toast(v?"Schlüssel gespeichert":"Gespeichert");document.getElementById("keyIn").value="";if(v||apiKey())document.getElementById("keyIn").placeholder="Schlüssel gespeichert"}
   else if(a==="checkUpdate"){window.AndroidBridge.checkUpdate(true)}
   else if(a==="exportShare"){window.AndroidBridge.share("fitness-daten-"+TODAY+".json",exportJson())}
   else if(a==="photoCancel"){if(photoAbort)photoAbort.abort()}
@@ -808,6 +1016,10 @@ document.addEventListener("submit",e=>{
     const n=id=>Math.max(0,+f.querySelector(id).value||0);
     day(cur,true).meals[slot].push({name,kcal:Math.round(kcal),p:n("#f-p"),c:n("#f-c"),f:n("#f-f")});
     changed(cur);openForm=null;render();toast(name+" eingetragen");
+  }else if(f.id==="shopForm"){
+    const n=document.getElementById("shopIn").value.trim();if(!n)return;
+    state.shop=state.shop||[];state.shop.push({id:"i"+Date.now().toString(36),n:n.slice(0,60),q:0,u:"",cat:guessCat(n),hint:"",done:false,src:[]});
+    changed("profile");render();setTimeout(()=>{const i=document.getElementById("shopIn");if(i)i.focus()},30);
   }else if(f.id==="weightForm"){
     const v=+document.getElementById("wIn").value;if(!(v>=30&&v<=250))return;
     state.weights[cur]=Math.round(v*10)/10;changed("profile");render();toast("Gewicht eingetragen");

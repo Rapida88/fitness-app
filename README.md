@@ -11,5 +11,5 @@ Die App sucht beim Start selbst nach Updates (`dist/version.json`) und installie
 ## Aufbau
 
 - `web/fitness-app.html`: die komplette Oberfläche (läuft auch im Browser)
-- `android/`: schlanke Android-Hülle (WebView, Kamera, Foto-Analyse über die Claude API, Update-Prüfung)
+- `android/`: schlanke Android-Hülle (WebView, Kamera, Foto- und Rezept-KI über die Gemini API, Update-Prüfung)
 - `android/build.sh <versionCode> <versionName>`: baut und signiert die APK. Der Signierschlüssel liegt bewusst nicht im Repo.

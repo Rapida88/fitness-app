@@ -41,7 +41,6 @@ import java.net.URL;
 
 public class MainActivity extends Activity {
     private static final int REQ_FILE = 1;
-    private static final String MODEL = "claude-opus-5-5";
 
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
@@ -234,59 +233,66 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void analyze(final String b64, final String prompt, final String key, final String id) {
+        public void gemini(final String b64, final String prompt, final String key, final String model, final String id) {
             new Thread(new Runnable() {
-                @Override public void run() { runAnalysis(b64, prompt, key, id); }
+                @Override public void run() { runGemini(b64, prompt, key, model, id); }
             }).start();
         }
     }
 
-    /* ---------- Foto-Analyse über die Claude API ---------- */
+    /* ---------- Fotos und Rezepte über die Gemini API ---------- */
 
-    private void runAnalysis(String b64, String prompt, String key, String id) {
+    private void runGemini(String b64, String prompt, String key, String model, String id) {
         HttpURLConnection c = null;
         try {
-            JSONObject img = new JSONObject()
-                .put("type", "image")
-                .put("source", new JSONObject().put("type", "base64").put("media_type", "image/jpeg").put("data", b64));
-            JSONObject txt = new JSONObject().put("type", "text").put("text", prompt);
+            JSONArray parts = new JSONArray();
+            if (b64 != null && !b64.isEmpty()) {
+                parts.put(new JSONObject().put("inline_data",
+                    new JSONObject().put("mime_type", "image/jpeg").put("data", b64)));
+            }
+            parts.put(new JSONObject().put("text", prompt));
             JSONObject body = new JSONObject()
-                .put("model", MODEL)
-                .put("max_tokens", 4000)
-                .put("output_config", new JSONObject().put("effort", "low"))
-                .put("fallbacks", "default")
-                .put("messages", new JSONArray().put(new JSONObject()
-                    .put("role", "user")
-                    .put("content", new JSONArray().put(img).put(txt))));
+                .put("contents", new JSONArray().put(new JSONObject().put("role", "user").put("parts", parts)))
+                .put("generationConfig", new JSONObject()
+                    .put("responseMimeType", "application/json")
+                    .put("temperature", 0.4));
 
-            c = (HttpURLConnection) new URL("https://api.anthropic.com/v1/messages").openConnection();
+            String m = model.replaceAll("[^A-Za-z0-9._-]", "");
+            c = (HttpURLConnection) new URL("https://generativelanguage.googleapis.com/v1beta/models/" + m + ":generateContent").openConnection();
             c.setConnectTimeout(20000);
             c.setReadTimeout(120000);
             c.setRequestMethod("POST");
             c.setDoOutput(true);
             c.setRequestProperty("content-type", "application/json");
-            c.setRequestProperty("x-api-key", key);
-            c.setRequestProperty("anthropic-version", "2023-06-01");
-            c.setRequestProperty("anthropic-beta", "server-side-fallback-2026-07-01");
+            c.setRequestProperty("x-goog-api-key", key);
             OutputStream out = c.getOutputStream();
             out.write(body.toString().getBytes("UTF-8"));
             out.close();
 
             int code = c.getResponseCode();
             String resp = readAll(code >= 400 ? c.getErrorStream() : c.getInputStream());
+            if (code == 400 && resp.contains("API key")) { callJs(id, false, "bad_key"); return; }
             if (code == 401 || code == 403) { callJs(id, false, "bad_key"); return; }
-            if (code == 429) { callJs(id, false, "rate_limited"); return; }
-            if (code == 400 && resp.contains("credit")) { callJs(id, false, "credit"); return; }
+            if (code == 404) { callJs(id, false, "model"); return; }
+            if (code == 429) { callJs(id, false, "quota"); return; }
             if (code >= 400) { callJs(id, false, "api_" + code); return; }
 
             JSONObject r = new JSONObject(resp);
-            if ("refusal".equals(r.optString("stop_reason"))) { callJs(id, false, "refused"); return; }
-            JSONArray content = r.optJSONArray("content");
+            JSONObject fb = r.optJSONObject("promptFeedback");
+            if (fb != null && fb.has("blockReason")) { callJs(id, false, "refused"); return; }
+            JSONArray cands = r.optJSONArray("candidates");
             StringBuilder sb = new StringBuilder();
-            if (content != null) {
-                for (int i = 0; i < content.length(); i++) {
-                    JSONObject b = content.optJSONObject(i);
-                    if (b != null && "text".equals(b.optString("type"))) sb.append(b.optString("text"));
+            if (cands != null && cands.length() > 0) {
+                JSONObject content = cands.getJSONObject(0).optJSONObject("content");
+                JSONArray ps = content != null ? content.optJSONArray("parts") : null;
+                if (ps != null) {
+                    for (int i = 0; i < ps.length(); i++) {
+                        JSONObject pt = ps.optJSONObject(i);
+                        if (pt != null && !pt.optBoolean("thought", false)) sb.append(pt.optString("text", ""));
+                    }
+                }
+                if (sb.length() == 0 && "SAFETY".equals(cands.getJSONObject(0).optString("finishReason"))) {
+                    callJs(id, false, "refused"); return;
                 }
             }
             if (sb.length() == 0) { callJs(id, false, "parse"); return; }
